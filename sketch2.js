@@ -1,13 +1,14 @@
 // --- Global Variables ---
 let sperm = [];
-let numSperm = 50; // Keep it at 50 to see the blue one
+let numSperm = 50; 
 let egg;
 let winner = null;
-let resultText = ""; // To store the outcome
+let resultText = ""; 
+let outcomeType = ""; // NEW: To track the *type* of birth for animation
 
-let attempts = 0;          // Counts every simulation run
-let autoRestartTimer = 0;  // Timer for automatic restart
-const RESTART_DELAY = 90;  // Frames to wait before auto-restarting (1.5 seconds)
+let attempts = 0;          
+let autoRestartTimer = 0;  
+const RESTART_DELAY = 90;  
 
 // --- The 'Egg' Object ---
 class Egg {
@@ -15,7 +16,6 @@ class Egg {
     this.pos = createVector(width / 2, 80);
     this.size = 50;
   }
-
   display() {
     noStroke();
     fill(255, 200, 150, 50);
@@ -31,50 +31,39 @@ class Egg {
 class Sperm {
   constructor(isYou) {
     this.pos = createVector(random(width), height - 20);
-    this.vel = createVector(0, -random(2, 4));
+    this.vel = createVector(0, -random(2.5, 4.5)); 
     this.noiseOffset = random(1000); 
-    
     this.isYou = isYou;
     this.color = isYou ? color(0, 150, 255) : color(255, 50, 50, 150);
-    
-    // NEW: For the tail
-    this.history = []; // Array to store past positions
-    this.tailLength = 10;
+    this.history = []; 
+    this.tailLength = 7; 
   }
 
   move() {
-    // Wiggle
-    let wiggle = map(noise(this.noiseOffset), 0, 1, -1, 1);
+    let wiggle = map(noise(this.noiseOffset), 0, 1, -2, 2);
     this.pos.x += wiggle;
-    
-    // Move up
     this.pos.add(this.vel);
+    this.noiseOffset += 0.1;
     
-    // Update noise for next frame
-    this.noiseOffset += 0.05;
-    
-    // --- NEW: Update Tail History ---
-    this.history.push(this.pos.copy()); // Add current position to the history
-    
-    // Limit the tail length
+    this.history.push(this.pos.copy()); 
     if (this.history.length > this.tailLength) {
-      this.history.splice(0, 1); // Remove the oldest position
+      this.history.splice(0, 1); 
     }
   }
 
   display() {
-    // --- NEW: Draw Animated Tail ---
-    // Draw the tail first
     beginShape();
     noFill();
     stroke(this.color);
     strokeWeight(3);
-    for (let pos of this.history) {
-      vertex(pos.x, pos.y);
+    for (let i = 0; i < this.history.length; i++) {
+      let pos = this.history[i];
+      let amplitude = map(i, 0, this.history.length - 1, 6, 0);
+      let visualWiggle = sin(frameCount * 0.6 + i * 0.5) * amplitude;
+      vertex(pos.x + visualWiggle, pos.y);
     }
     endShape();
     
-    // Draw the head on top
     fill(this.color);
     noStroke();
     ellipse(this.pos.x, this.pos.y, 8, 8);
@@ -93,57 +82,46 @@ class Sperm {
 
 function setup() {
   createCanvas(600, 600);
-  
   egg = new Egg();
-  
-  // Clear old sperm
   sperm = [];
-  
-  // Create all the "other" red sperm
   for (let i = 0; i < numSperm - 1; i++) {
     sperm.push(new Sperm(false));
   }
-  // Create the one "blue" sperm (you!)
   sperm.push(new Sperm(true));
   
   winner = null;
   resultText = "";
+  outcomeType = ""; // NEW: Reset the outcome type
   autoRestartTimer = 0;
-  
-  attempts++; // Increment the attempt counter every time we setup
-  
-  loop(); // Ensure the draw loop is running
+  attempts++; 
+  loop(); 
 }
 
 function draw() {
   background(0, 0, 30);
-  
   egg.display();
 
-  // If we don't have a winner yet, keep the race going
   if (!winner) {
     for (let s of sperm) {
       s.move();
       s.display();
       
       if (s.checkWin(egg)) {
-        winner = s; // We have a winner!
-        determineOutcome(winner); // Run the probability model
+        winner = s; 
+        determineOutcome(winner); // This will set resultText AND outcomeType
         
         if (!winner.isYou) {
-          // 'You' did not win, set timer to auto-restart
           autoRestartTimer = RESTART_DELAY;
         } else {
-          // 'You' WON! Stop the simulation.
-          noLoop();
+          loop(); // NEW: Keep the loop running for the animation
         }
-        break; // Exit the loop
+        break; 
       }
     }
   } else {
     // --- A winner has been found ---
     
-    // Keep drawing all sperm in their final position
+    // Keep drawing all sperm
     for (let s of sperm) {
       s.display();
     }
@@ -152,6 +130,11 @@ function draw() {
     fill(255);
     stroke(255);
     ellipse(winner.pos.x, winner.pos.y, 12, 12);
+    
+    // Darken the background
+    fill(0, 0, 0, 150); 
+    noStroke();
+    rect(0, 0, width, height);
     
     // Display the final result
     textAlign(CENTER, CENTER);
@@ -162,14 +145,52 @@ function draw() {
       textSize(24);
       text(resultText, width / 2, height / 2 - 20);
       
-      fill(0, 255, 0); // Green for success
+      fill(0, 255, 0); 
       textSize(22);
       text(`It took ${attempts} attempts for 'YOU' to be born!`, width / 2, height / 2 + 30);
       
       fill(255);
       textSize(16);
-      text("Click anywhere to reset and start over.", width / 2, height / 2 + 70);
+      text("Click anywhere to reset and start over.", width / 2, height / 2 + 150); // Moved text down
       
+      // --- NEW: VISUAL ANIMATION ---
+      // This runs only on the 'YOU' win screen
+      
+      // Base position for the animation
+      let animX = width / 2;
+      let animY = height / 2 + 100;
+      
+      if (outcomeType === 'single') {
+        fill(255, 220, 200);
+        noStroke();
+        ellipse(animX, animY, 30, 30); // Draw one embryo
+      } 
+      else if (outcomeType === 'identical') {
+        // Draw the splitting animation
+        // sin(frameCount * 0.05) makes it wobble slowly
+        let wobble = map(sin(frameCount * 0.05), -1, 1, 0, 15); // 0 to 15 pixels
+        
+        fill(255, 220, 200);
+        noStroke();
+        ellipse(animX - wobble, animY, 30, 30); // Left cell
+        ellipse(animX + wobble, animY, 30, 30); // Right cell
+      }
+      else if (outcomeType === 'fraternal') {
+        // Draw two *separate* embryos
+        fill(255, 220, 200);
+        noStroke();
+        ellipse(animX - 20, animY, 30, 30); // Embryo 1
+        ellipse(animX + 20, animY, 30, 30); // Embryo 2
+      }
+      else if (outcomeType === 'triplets') {
+         // Draw three *separate* embryos
+        fill(255, 220, 200);
+        noStroke();
+        ellipse(animX - 30, animY, 30, 30); 
+        ellipse(animX, animY, 30, 30); 
+        ellipse(animX + 30, animY, 30, 30);
+      }
+
     } else {
       // --- FAILURE (Auto-Restart) SCREEN ---
       autoRestartTimer--;
@@ -177,11 +198,11 @@ function draw() {
         setup(); // Restart the simulation
       }
       
-      fill(255);
+      fill(255); 
       textSize(24);
       text(resultText, width / 2, height / 2 - 20);
       
-      fill(255, 100, 100); // Red for failure
+      fill(255, 100, 100); 
       textSize(18);
       text(`Attempt ${attempts}: 'You' were not born.`, width / 2, height / 2 + 20);
       
@@ -190,14 +211,19 @@ function draw() {
       text("Retrying automatically...", width / 2, height / 2 + 50);
     }
   }
+  
+  // --- Draw attempt counter in top right corner ---
+  fill(255);
+  textSize(16);
+  textAlign(RIGHT, TOP); 
+  text("Attempts: " + attempts, width - 10, 10);
 }
 
 // This function runs when the mouse is clicked
 function mousePressed() {
-  // Only allow reset if 'you' have won and the simulation is stopped
   if (winner && winner.isYou) {
-    attempts = 0; // Reset counter
-    setup();      // Re-run setup
+    attempts = 0; 
+    setup();      
   }
 }
 
@@ -211,20 +237,22 @@ function determineOutcome(winningSperm) {
     baseText = "Another sperm won. 🔴";
   }
 
-  // Real-world odds (approximate)
   const oddsIdenticalTwins = 1 / 250;
   const oddsFraternalTwins = 1 / 80;
   const oddsTriplets = 1 / 8000; 
-
   let roll = random(1); 
 
   if (roll < oddsTriplets) {
     resultText = baseText + "\nAnd it's TRIPLETS! 👶👶👶";
+    outcomeType = 'triplets'; // NEW
   } else if (roll < oddsTriplets + oddsIdenticalTwins) {
     resultText = baseText + "\nAnd it's IDENTICAL TWINS! 👶👶";
+    outcomeType = 'identical'; // NEW
   } else if (roll < oddsTriplets + oddsIdenticalTwins + oddsFraternalTwins) {
     resultText = baseText + "\nAnd it's FRATERNAL TWINS! 👶👶";
+    outcomeType = 'fraternal'; // NEW
   } else {
     resultText = baseText + "\nIt's a SINGLE BABY! 👶";
+    outcomeType = 'single'; // NEW
   }
 }
