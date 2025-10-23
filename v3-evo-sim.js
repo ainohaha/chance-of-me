@@ -5,7 +5,7 @@ let genePool = {
 };
 let MUTATION_RATE = 0.3; // How much genes can change
 let numSperm = 200;
-let numEggs = 5; // More eggs = faster evolution
+let numEggs = 2; // More eggs = faster evolution
 
 // --- Global Variables ---
 let sperm = [];
@@ -13,6 +13,9 @@ let eggs = [];
 let winners = []; 
 let generationCounter = 0;
 let raceOver = false;
+
+let resetTimer = 0;
+const RESET_DELAY = 120; // 120 frames (approx 2 seconds)
 
 // --- The 'Egg' Object ---
 class Egg {
@@ -42,21 +45,19 @@ class Sperm {
   constructor() {
     this.pos = createVector(random(width), height - 20);
     
-    // --- NEW: Inherit from Gene Pool + Mutate ---
+    // --- Inherit from Gene Pool + Mutate ---
     let speedMutation = random(-MUTATION_RATE, MUTATION_RATE);
     let agilityMutation = random(-MUTATION_RATE, MUTATION_RATE);
     
     this.gene_speed = genePool.avgSpeed + speedMutation;
     this.gene_agility = genePool.avgAgility + agilityMutation;
     
-    // Make sure genes don't go negative
     if (this.gene_speed < 0.5) this.gene_speed = 0.5;
     if (this.gene_agility < 0.1) this.gene_agility = 0.1;
 
     this.vel = createVector(0, -this.gene_speed); 
     this.noiseOffset = random(1000); 
     
-    // Color is based on speed (dim red = slow, bright red = fast)
     let r = map(this.gene_speed, 1, 6, 100, 255, true);
     this.color = color(r, 50, 50, 150);
     
@@ -69,7 +70,6 @@ class Sperm {
   move() {
     if (this.isOffScreen || this.hasWon) return; 
     
-    // Wiggle is now based on its agility gene
     let wiggle = map(noise(this.noiseOffset), 0, 1, -this.gene_agility, this.gene_agility);
     
     this.pos.x += wiggle;
@@ -114,7 +114,7 @@ class Sperm {
         let d = dist(this.pos.x, this.pos.y, e.pos.x, e.pos.y);
         if (d < e.size / 2) {
           e.isFertilized = true; 
-          e.winner = this;      // Store this sperm as the winner
+          e.winner = this;      
           this.hasWon = true;   
           winners.push(this);   
           break; 
@@ -132,12 +132,15 @@ function setup() {
   createNextGeneration(true);
 }
 
-// NEW: This is the core of the evolution
+// This is the core of the evolution
 function createNextGeneration(isFirstGeneration = false) {
   
+  let successRate = `${winners.length}/${numEggs}`;
+
   if (isFirstGeneration) {
     genePool = { avgSpeed: 3.0, avgAgility: 1.5 };
     generationCounter = 1;
+    successRate = "N/A";
   } else {
     // --- 1. Calculate the new gene pool from winners ---
     if (winners.length > 0) {
@@ -148,16 +151,20 @@ function createNextGeneration(isFirstGeneration = false) {
         totalAgility += w.gene_agility;
       }
       
-      // Get the average
       genePool.avgSpeed = totalSpeed / winners.length;
       genePool.avgAgility = totalAgility / winners.length;
       
     } else {
-      // If no one won (population wipeout), the genes were bad. Reset.
+      // If no one won, reset to base genes.
       genePool = { avgSpeed: 3.0, avgAgility: 1.5 };
     }
     generationCounter++;
   }
+  
+  // --- NEW: Log results to console ---
+  console.log(
+    `Gen: ${generationCounter} | Success: ${successRate} | Avg Speed: ${nfs(genePool.avgSpeed, 1, 2)} | Avg Agility: ${nfs(genePool.avgAgility, 1, 2)}`
+  );
 
   // --- 2. Reset the environment ---
   eggs = [];
@@ -170,11 +177,10 @@ function createNextGeneration(isFirstGeneration = false) {
   sperm = [];
   winners = [];
   for (let i = 0; i < numSperm; i++) {
-    sperm.push(new Sperm()); // New sperm will inherit from the new genePool
+    sperm.push(new Sperm()); 
   }
   
   raceOver = false;
-  loop(); // Start the race
 }
 
 function draw() {
@@ -203,13 +209,12 @@ function draw() {
     // Check for end conditions
     if (winners.length === eggs.length || !anyoneAlive) {
       raceOver = true; // Stop the race
-      noLoop(); // Pause p5
+      resetTimer = RESET_DELAY; // Set the reset timer
     }
     
   } else {
-    // --- The race is over, show results ---
+    // --- The race is over, show results and wait ---
     
-    // Keep drawing sperm
     for (let s of sperm) {
       s.display(); 
     }
@@ -235,21 +240,21 @@ function draw() {
     text(`Avg. Winner Agility: ${nfs(genePool.avgAgility, 1, 2)}`, width / 2, height / 2 + 30);
 
     textSize(16);
-    text("Click to start the next generation.", width / 2, height / 2 + 80);
+    fill(200);
+    text(`New generation in ${ceil(resetTimer/60)}...`, width / 2, height / 2 + 80);
+    
+    // --- Auto-reset logic ---
+    resetTimer--;
+    if (resetTimer <= 0) {
+      createNextGeneration(false);
+    }
   }
   
-  // Display stats in corner
+  // Display stats in corner (always on top)
   fill(255);
   textSize(16);
   textAlign(LEFT, TOP); 
   text(`Generation: ${generationCounter}`, 10, 10);
   text(`Avg Speed: ${nfs(genePool.avgSpeed, 1, 2)}`, 10, 30);
   text(`Avg Agility: ${nfs(genePool.avgAgility, 1, 2)}`, 10, 50);
-}
-
-function mousePressed() {
-  if (raceOver) {
-    // If the race is over, clicking starts the next generation
-    createNextGeneration();
-  }
 }
